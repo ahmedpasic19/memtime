@@ -1,36 +1,54 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Memtime Time Tracking (Interview Task)
 
-## Getting Started
+Next.js application for browsing **Clients → Projects → Tasks** and managing **time entries** against the Memtime interview API.
 
-First, run the development server:
+## Setup
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
+cp .env.example .env.local   # add your API key
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) (redirects to `/time-entries`).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Environment
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Variable          | Description                                                            |
+| ----------------- | ---------------------------------------------------------------------- |
+| `MEMTIME_API_URL` | Base URL, default `https://interview-api.memtime-demo.deno.net/api/v1` |
+| `MEMTIME_API_KEY` | Bearer token for API requests (server-side only)                       |
 
-## Learn More
+## Scripts
 
-To learn more about Next.js, take a look at the following resources:
+| Command          | Description           |
+| ---------------- | --------------------- |
+| `pnpm dev`       | Development server    |
+| `pnpm build`     | Production build      |
+| `pnpm start`     | Run production server |
+| `pnpm lint`      | ESLint                |
+| `pnpm typecheck` | TypeScript            |
+| `pnpm test`      | Vitest unit tests     |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Architecture
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+Browser → /api/* Route Handlers → lib/memtime (server-only) → Memtime API
+         ↳ TanStack Query (client caching & mutations)
+```
 
-## Deploy on Vercel
+- **API key safety:** The browser never calls the external API. Route Handlers attach `Authorization` on the server and strip `userId` (the upstream API key) from time entry responses before sending JSON to the client.
+- **Rate limit (15 req/min):** The hierarchy tree lazy-loads projects and tasks on expand. Hierarchy reads are cached on the server for 5 minutes (`revalidate: 300`). TanStack Query caches client results for 5 minutes and does not retry on `429`.
+- **Pagination:** Time entries use URL `limit` and `offset`. Each page requests exactly `limit` rows from the API; **Next** is enabled when a full page is returned. Changing pages keeps the previous page visible while fetching (`keepPreviousData`).
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Routes
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `/clients` — expandable client / project / task tree with paginated “Load more”
+- `/time-entries` — paginated list, create/edit dialog, delete with confirmation
+
+### Project layout
+
+- `src/lib/memtime/` — typed server HTTP client
+- `src/app/api/` — BFF proxies
+- `src/features/hierarchy/` — tree UI and hooks
+- `src/features/time-entries/` — list, form, validation, mutations
